@@ -1,0 +1,1350 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# MapReduce using SPARK"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Populating the interactive namespace from numpy and matplotlib\n"
+     ]
+    }
+   ],
+   "source": [
+    "%pylab inline\n",
+    "import pandas as pd\n",
+    "import seaborn as sns\n",
+    "pd.set_option('display.width', 500)\n",
+    "pd.set_option('display.max_columns', 100)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Table of Contents\n",
+    "\n",
+    "* [SPARK](#SPARK)\n",
+    "    * Installing Spark locally\n",
+    "* [Spark Context](#Spark-Context)\n",
+    "    * [Create A RDD](#Create-A-RDD)\n",
+    "    * [Call `collect` on an RDD: Lazy Spark](#Call-collect-on-an-RDD:-Lazy-Spark)\n",
+    "    * [Operations on RDDs](#Operations-on-RDDs)\n",
+    "    * [Word Examples](#Word-Examples)\n",
+    "    * [Key Value Pairs](#Key-Value-Pairs)\n",
+    "    * [word count 1](#word-count-1)\n",
+    "    * [word count 2:  `reduceByKey()`](#word-count-2:--reduceByKey%28%29)\n",
+    "    * [Nested Syntax](#Nested-Syntax)\n",
+    "    * [Using Cache](#Using-Cache)\n",
+    "    * [Fun with words](#Fun-with-words)\n",
+    "    * [DataFrames](#DataFrames)\n",
+    "    * [Machine Learning](#Machine-Learning)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "With shameless stealing of some code and text from:\n",
+    "\n",
+    "- https://github.com/tdhopper/rta-pyspark-presentation/blob/master/slides.ipynb\n",
+    "- Databricks and Berkeley Spark MOOC: https://www.edx.org/course/introduction-big-data-apache-spark-uc-berkeleyx-cs100-1x\n",
+    "\n",
+    "which you should go check out."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Installing Spark locally\n",
+    "\n",
+    "\n",
+    "**Step 1: Install Apache Spark**\n",
+    "\n",
+    "For example, for Mac users using Homebrew:\n",
+    "\n",
+    "```\n",
+    "$ brew install apache-spark\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Step 2: Install the Java SDK version 1.8 or above for your platform (not just the JRE runtime)**\n",
+    "\n",
+    "Make sure you can access commands such as `java` on your command line."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Step 3: Install the latest findspark package using pip**\n",
+    "\n",
+    "```\n",
+    "➜  ~  pip install findspark\n",
+    "Collecting findspark\n",
+    "  Downloading findspark-0.0.5-py2.py3-none-any.whl\n",
+    "Installing collected packages: findspark\n",
+    "Successfully installed findspark-0.0.5\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "# Spark Context\n",
+    "\n",
+    "You can also use it directly from the notebook interface on the mac if you installed `apache-spark` using `brew` and also installed `findspark` above."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import findspark\n",
+    "findspark.init()\n",
+    "import pyspark\n",
+    "sc = pyspark.SparkContext()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "It also outputs a bunch of stuff on my terminal. This is because the entire java context is started up.\n",
+    "\n",
+    "```Using Spark's default log4j profile: org/apache/spark/log4j-defaults.properties\n",
+    "15/10/21 14:46:15 INFO SparkContext: Running Spark version 1.4.0\n",
+    "2015-10-21 14:46:15.774 java[30685:c003] Unable to load realm info from SCDynamicStore\n",
+    "15/10/21 14:46:15 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable\n",
+    "15/10/21 14:46:15 INFO SecurityManager: Changing view acls to: rahul\n",
+    "15/10/21 14:46:15 INFO SecurityManager: Changing modify acls to: rahul\n",
+    "15/10/21 14:46:15 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: Set(rahul); users with modify permissions: Set(rahul)\n",
+    "15/10/21 14:46:16 INFO Slf4jLogger: Slf4jLogger started\n",
+    "15/10/21 14:46:16 INFO Remoting: Starting remoting\n",
+    "15/10/21 14:46:16 INFO Remoting: Remoting started; listening on addresses :[akka.tcp://sparkDriver@10.251.101.163:64359]\n",
+    "15/10/21 14:46:16 INFO Utils: Successfully started service 'sparkDriver' on port 64359.\n",
+    "15/10/21 14:46:16 INFO SparkEnv: Registering MapOutputTracker\n",
+    "15/10/21 14:46:16 INFO SparkEnv: Registering BlockManagerMaster\n",
+    "15/10/21 14:46:16 INFO DiskBlockManager: Created local directory at /private/var/folders/_f/y76rs29s3c57ykwyz9c8z12c0000gn/T/spark-00a4e09e-e5db-485f-81dc-2e5016e9a27e/blockmgr-8966e07c-223b-4c38-9273-11543aa9d3c1\n",
+    "15/10/21 14:46:16 INFO MemoryStore: MemoryStore started with capacity 273.0 MB\n",
+    "15/10/21 14:46:16 INFO HttpFileServer: HTTP File server directory is /private/var/folders/_f/y76rs29s3c57ykwyz9c8z12c0000gn/T/spark-00a4e09e-e5db-485f-81dc-2e5016e9a27e/httpd-6af0a9e0-1cfe-42c4-a1bd-e01715b98436\n",
+    "15/10/21 14:46:16 INFO HttpServer: Starting HTTP Server\n",
+    "15/10/21 14:46:17 INFO Utils: Successfully started service 'HTTP file server' on port 64360.\n",
+    "15/10/21 14:46:17 INFO SparkEnv: Registering OutputCommitCoordinator\n",
+    "15/10/21 14:46:18 INFO Utils: Successfully started service 'SparkUI' on port 4040.\n",
+    "15/10/21 14:46:18 INFO SparkUI: Started SparkUI at http://10.251.101.163:4040\n",
+    "15/10/21 14:46:18 INFO Executor: Starting executor ID driver on host localhost\n",
+    "15/10/21 14:46:18 INFO Utils: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 64361.\n",
+    "15/10/21 14:46:18 INFO NettyBlockTransferService: Server created on 64361\n",
+    "15/10/21 14:46:18 INFO BlockManagerMaster: Trying to register BlockManager\n",
+    "15/10/21 14:46:18 INFO BlockManagerMasterEndpoint: Registering block manager localhost:64361 with 273.0 MB RAM, BlockManagerId(driver, localhost, 64361)\n",
+    "15/10/21 14:46:18 INFO BlockManagerMaster: Registered BlockManager\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "\n",
+       "        <div>\n",
+       "            <p><b>SparkContext</b></p>\n",
+       "\n",
+       "            <p><a href=\"http://192.168.7.53:4040\">Spark UI</a></p>\n",
+       "\n",
+       "            <dl>\n",
+       "              <dt>Version</dt>\n",
+       "                <dd><code>v2.4.4</code></dd>\n",
+       "              <dt>Master</dt>\n",
+       "                <dd><code>local[*]</code></dd>\n",
+       "              <dt>AppName</dt>\n",
+       "                <dd><code>pyspark-shell</code></dd>\n",
+       "            </dl>\n",
+       "        </div>\n",
+       "        "
+      ],
+      "text/plain": [
+       "<SparkContext master=local[*] appName=pyspark-shell>"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "sc"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "385"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "sc.parallelize([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).map(lambda x: x**2).sum()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "### Create A RDD\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "<class 'pyspark.rdd.RDD'>\n"
+     ]
+    }
+   ],
+   "source": [
+    "wordsList = ['cat', 'elephant', 'rat', 'rat', 'cat']\n",
+    "wordsRDD = sc.parallelize(wordsList, 4)\n",
+    "# Print out the type of wordsRDD\n",
+    "print(type(wordsRDD))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "### Call `collect` on an RDD: Lazy Spark"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Spark is lazy. Until you `collect`, nothing is actually run.\n",
+    "\n",
+    ">Instead, they just remember the transformations applied to some base dataset (e.g. a file). The transformations are only computed when an action requires a result to be returned to the driver program."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['cat', 'elephant', 'rat', 'rat', 'cat']"
+      ]
+     },
+     "execution_count": 7,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "wordsRDD.collect()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```\n",
+    "15/10/21 14:59:59 INFO SparkContext: Starting job: collect at <ipython-input-6-dee494da0714>:1\n",
+    "15/10/21 14:59:59 INFO DAGScheduler: Got job 0 (collect at <ipython-input-6-dee494da0714>:1) with 4 output partitions (allowLocal=false)\n",
+    "15/10/21 14:59:59 INFO DAGScheduler: Final stage: ResultStage 0(collect at <ipython-input-6-dee494da0714>:1)\n",
+    "15/10/21 14:59:59 INFO DAGScheduler: Parents of final stage: List()\n",
+    "15/10/21 14:59:59 INFO DAGScheduler: Missing parents: List()\n",
+    "15/10/21 14:59:59 INFO DAGScheduler: Submitting ResultStage 0 (ParallelCollectionRDD[0] at parallelize at PythonRDD.scala:396), which has no missing parents\n",
+    "15/10/21 15:00:00 INFO MemoryStore: ensureFreeSpace(1224) called with curMem=0, maxMem=286300569\n",
+    "15/10/21 15:00:00 INFO MemoryStore: Block broadcast_0 stored as values in memory (estimated size 1224.0 B, free 273.0 MB)\n",
+    "15/10/21 15:00:00 INFO MemoryStore: ensureFreeSpace(777) called with curMem=1224, maxMem=286300569\n",
+    "15/10/21 15:00:00 INFO MemoryStore: Block broadcast_0_piece0 stored as bytes in memory (estimated size 777.0 B, free 273.0 MB)\n",
+    "15/10/21 15:00:00 INFO BlockManagerInfo: Added broadcast_0_piece0 in memory on localhost:64361 (size: 777.0 B, free: 273.0 MB)\n",
+    "15/10/21 15:00:00 INFO SparkContext: Created broadcast 0 from broadcast at DAGScheduler.scala:874\n",
+    "15/10/21 15:00:00 INFO DAGScheduler: Submitting 4 missing tasks from ResultStage 0 (ParallelCollectionRDD[0] at parallelize at PythonRDD.scala:396)\n",
+    "15/10/21 15:00:00 INFO TaskSchedulerImpl: Adding task set 0.0 with 4 tasks\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Starting task 0.0 in stage 0.0 (TID 0, localhost, PROCESS_LOCAL, 1379 bytes)\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Starting task 1.0 in stage 0.0 (TID 1, localhost, PROCESS_LOCAL, 1384 bytes)\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Starting task 2.0 in stage 0.0 (TID 2, localhost, PROCESS_LOCAL, 1379 bytes)\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Starting task 3.0 in stage 0.0 (TID 3, localhost, PROCESS_LOCAL, 1403 bytes)\n",
+    "15/10/21 15:00:00 INFO Executor: Running task 0.0 in stage 0.0 (TID 0)\n",
+    "15/10/21 15:00:00 INFO Executor: Running task 2.0 in stage 0.0 (TID 2)\n",
+    "15/10/21 15:00:00 INFO Executor: Running task 1.0 in stage 0.0 (TID 1)\n",
+    "15/10/21 15:00:00 INFO Executor: Running task 3.0 in stage 0.0 (TID 3)\n",
+    "15/10/21 15:00:00 INFO Executor: Finished task 1.0 in stage 0.0 (TID 1). 646 bytes result sent to driver\n",
+    "15/10/21 15:00:00 INFO Executor: Finished task 3.0 in stage 0.0 (TID 3). 665 bytes result sent to driver\n",
+    "15/10/21 15:00:00 INFO Executor: Finished task 0.0 in stage 0.0 (TID 0). 641 bytes result sent to driver\n",
+    "15/10/21 15:00:00 INFO Executor: Finished task 2.0 in stage 0.0 (TID 2). 641 bytes result sent to driver\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Finished task 1.0 in stage 0.0 (TID 1) in 61 ms on localhost (1/4)\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Finished task 3.0 in stage 0.0 (TID 3) in 60 ms on localhost (2/4)\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Finished task 0.0 in stage 0.0 (TID 0) in 96 ms on localhost (3/4)\n",
+    "15/10/21 15:00:00 INFO TaskSetManager: Finished task 2.0 in stage 0.0 (TID 2) in 63 ms on localhost (4/4)\n",
+    "15/10/21 15:00:00 INFO DAGScheduler: ResultStage 0 (collect at <ipython-input-6-dee494da0714>:1) finished in 0.120 s\n",
+    "15/10/21 15:00:00 INFO TaskSchedulerImpl: Removed TaskSet 0.0, whose tasks have all completed, from pool\n",
+    "15/10/21 15:00:00 INFO DAGScheduler: Job 0 finished: collect at <ipython-input-6-dee494da0714>:1, took 0.872367 s\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Operations on RDDs"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "From the Spark Programming Guide:\n",
+    "\n",
+    ">RDDs support two types of operations: transformations, which create a new dataset from an existing one, and actions, which return a value to the driver program after running a computation on the dataset. For example, map is a transformation that passes each dataset element through a function and returns a new RDD representing the results. On the other hand, reduce is an action that aggregates all the elements of the RDD using some function and returns the final result to the driver program (although there is also a parallel reduceByKey that returns a distributed dataset)."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Word Examples"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "cats\n"
+     ]
+    }
+   ],
+   "source": [
+    "def makePlural(word):\n",
+    "    return word + 's'\n",
+    "\n",
+    "print(makePlural('cat'))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Transform one RDD into another."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "cats\n",
+      "['cats', 'elephants']\n"
+     ]
+    }
+   ],
+   "source": [
+    "pluralRDD = wordsRDD.map(makePlural)\n",
+    "print(pluralRDD.first())\n",
+    "print(pluralRDD.take(2))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['cats']"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "pluralRDD.take(1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['cats', 'elephants', 'rats', 'rats', 'cats']"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "pluralRDD.collect()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "### Key Value Pairs"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "[('cat', 1), ('elephant', 1), ('rat', 1), ('rat', 1), ('cat', 1)]\n"
+     ]
+    }
+   ],
+   "source": [
+    "wordPairs = wordsRDD.map(lambda w: (w, 1))\n",
+    "print(wordPairs.collect())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "```\n",
+    "➜  sparklect  ps auxwww | grep pyspark\n",
+    "rahul           30685   0.4  0.8  3458120  68712 s012  S+    2:46PM   2:00.21 /System/Library/Java/JavaVirtualMachines/1.6.0.jdk/Contents/Home/bin/java -cp /usr/local/opt/apache-spark/libexec/conf/:/usr/local/opt/apache-spark/libexec/lib/spark-assembly-1.4.0-hadoop2.6.0.jar:/usr/local/opt/apache-spark/libexec/lib/datanucleus-api-jdo-3.2.6.jar:/usr/local/opt/apache-spark/libexec/lib/datanucleus-core-3.2.10.jar:/usr/local/opt/apache-spark/libexec/lib/datanucleus-rdbms-3.2.9.jar -Xms512m -Xmx512m -XX:MaxPermSize=128m org.apache.spark.deploy.SparkSubmit pyspark-shell\n",
+    "rahul           31520   0.0  0.0  2432784    480 s011  R+    6:42PM   0:00.00 grep --color=auto --exclude-dir=.bzr --exclude-dir=.cvs --exclude-dir=.git --exclude-dir=.hg --exclude-dir=.svn pyspark\n",
+    "rahul           31494   0.0  0.7  2548972  57288 s012  S     6:41PM   0:00.10 python -m pyspark.daemon\n",
+    "rahul           31493   0.0  0.7  2548972  57308 s012  S     6:41PM   0:00.10 python -m pyspark.daemon\n",
+    "rahul           31492   0.0  0.7  2548972  57288 s012  S     6:41PM   0:00.11 python -m pyspark.daemon\n",
+    "rahul           31446   0.0  0.8  2548972  68460 s012  S     6:35PM   0:01.34 python -m pyspark.daemon\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "### WORD COUNT!\n",
+    "\n",
+    "This little exercise shows how to use mapreduce to calculate the counts of individual words in a list."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "[('cat', 2), ('elephant', 1), ('rat', 2)]\n"
+     ]
+    }
+   ],
+   "source": [
+    "wordsList = ['cat', 'elephant', 'rat', 'rat', 'cat']\n",
+    "wordsRDD = sc.parallelize(wordsList, 4)\n",
+    "wordCountsCollected = (wordsRDD\n",
+    "                       .map(lambda w: (w, 1))\n",
+    "                       .reduceByKey(lambda x,y: x+y)\n",
+    "                       .collect())\n",
+    "print(wordCountsCollected)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "![Tons of shuffling](https://databricks.gitbooks.io/databricks-spark-knowledge-base/content/images/reduce_by.png)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "b'(4) PythonRDD[22] at RDD at PythonRDD.scala:53 []\\n |  MapPartitionsRDD[21] at mapPartitions at PythonRDD.scala:133 []\\n |  ShuffledRDD[20] at partitionBy at NativeMethodAccessorImpl.java:0 []\\n +-(4) PairwiseRDD[19] at reduceByKey at <ipython-input-19-00e8853ca0b7>:3 []\\n    |  PythonRDD[18] at reduceByKey at <ipython-input-19-00e8853ca0b7>:3 []\\n    |  ParallelCollectionRDD[12] at parallelize at PythonRDD.scala:195 []'\n"
+     ]
+    }
+   ],
+   "source": [
+    "print((wordsRDD\n",
+    "    .map(lambda w: (w, 1))\n",
+    "    .reduceByKey(lambda x,y: x+y)).toDebugString())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "slideshow": {
+     "slide_type": "slide"
+    }
+   },
+   "source": [
+    "### Using Cache"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "ParallelCollectionRDD[23] at parallelize at PythonRDD.scala:195\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "5"
+      ]
+     },
+     "execution_count": 21,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "wordsList = ['cat', 'elephant', 'rat', 'rat', 'cat']\n",
+    "wordsRDD = sc.parallelize(wordsList, 4)\n",
+    "print(wordsRDD)\n",
+    "wordsRDD.count()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Normally, every operation is run from the start. This may be inefficient in many cases. So when appropriate, we may want to cache the result the first time an operation is run on an RDD."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "5"
+      ]
+     },
+     "execution_count": 22,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#this is rerun from the start\n",
+    "wordsRDD.count()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "ParallelCollectionRDD[23] at parallelize at PythonRDD.scala:195"
+      ]
+     },
+     "execution_count": 23,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#default storage level (MEMORY_ONLY)\n",
+    "wordsRDD.cache()#nothing done this is still lazy"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "5"
+      ]
+     },
+     "execution_count": 24,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#parallelize is rerun and cached because we told it to cache\n",
+    "wordsRDD.count()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 25,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "5"
+      ]
+     },
+     "execution_count": 25,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "#this `sc.parallelize` is not rerun in this case\n",
+    "wordsRDD.count()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Where is this useful: it is when you have branching parts or loops, so that you dont do things again and again. Spark, being \"lazy\" will rerun the chain again. So `cache` or `persist` serves as a checkpoint, breaking the RDD chain or the *lineage*."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{'cat': 'mammal',\n",
+       " 'elephant': 'mammal',\n",
+       " 'rat': 'mammal',\n",
+       " 'heron': 'bird',\n",
+       " 'owl': 'bird'}"
+      ]
+     },
+     "execution_count": 26,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "birdsList=['heron','owl']\n",
+    "animList=wordsList+birdsList\n",
+    "animaldict={}\n",
+    "for e in wordsList:\n",
+    "    animaldict[e]='mammal'\n",
+    "for e in birdsList:\n",
+    "    animaldict[e]='bird'\n",
+    "animaldict"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 28,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "5 2\n"
+     ]
+    }
+   ],
+   "source": [
+    "animsrdd = sc.parallelize(animList, 4)\n",
+    "animsrdd.cache()\n",
+    "#below runs the whole chain but causes cache to be populated\n",
+    "mammalcount=animsrdd.filter(lambda w: animaldict[w]=='mammal').count()\n",
+    "#now only the filter is carried out\n",
+    "birdcount=animsrdd.filter(lambda w: animaldict[w]=='bird').count()\n",
+    "print(mammalcount, birdcount)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Exercises: Fun with MapReduce\n",
+    "\n",
+    "Read http://spark.apache.org/docs/latest/programming-guide.html for some useful background and then try out the following exercises"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The file `./sparklect/english.stop.txt` contains a list of English stopwords, while the file `./sparklect/shakes/juliuscaesar.txt` contains the entire text of Shakespeare's 'Julius Caesar'.\n",
+    "\n",
+    "* Load all of the stopwords into a Python list\n",
+    "* Load the text of Julius Caesar into an RDD using the `sparkcontext.textfile()` method. Call it `juliusrdd`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 33,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "with open('english.stop.txt', 'r') as es:\n",
+    "    stopwords = es.read().splitlines()\n",
+    "    \n",
+    "juliusrdd = sc.textFile('juliuscaesar.txt')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "How many words does Julius Caesar have? *Hint: use `flatMap()`*."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 50,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Julius Caesar has 21245 words.\n"
+     ]
+    }
+   ],
+   "source": [
+    "w = len(juliusrdd.flatMap(lambda x: x.split()).collect())\n",
+    "print(\"Julius Caesar has\", w, 'words.')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now print the first 20 words of Julius Caesar as a Python list."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 51,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['1599',\n",
+       " 'THE',\n",
+       " 'TRAGEDY',\n",
+       " 'OF',\n",
+       " 'JULIUS',\n",
+       " 'CAESAR',\n",
+       " 'by',\n",
+       " 'William',\n",
+       " 'Shakespeare',\n",
+       " 'Dramatis',\n",
+       " 'Personae',\n",
+       " 'JULIUS',\n",
+       " 'CAESAR,',\n",
+       " 'Roman',\n",
+       " 'statesman',\n",
+       " 'and',\n",
+       " 'general',\n",
+       " 'OCTAVIUS,',\n",
+       " 'Triumvir',\n",
+       " 'after']"
+      ]
+     },
+     "execution_count": 51,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "juliusrdd.flatMap(lambda x: x.split()).take(20)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now print the first 20 words of Julius Caesar, **after removing all the stopwords**. *Hint: use `filter()`*."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 52,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['1599',\n",
+       " 'TRAGEDY',\n",
+       " 'JULIUS',\n",
+       " 'CAESAR',\n",
+       " 'William',\n",
+       " 'Shakespeare',\n",
+       " 'Dramatis',\n",
+       " 'Personae',\n",
+       " 'JULIUS',\n",
+       " 'CAESAR,',\n",
+       " 'Roman',\n",
+       " 'statesman',\n",
+       " 'general',\n",
+       " 'OCTAVIUS,',\n",
+       " 'Triumvir',\n",
+       " \"Caesar's\",\n",
+       " 'death,',\n",
+       " 'Augustus',\n",
+       " 'Caesar,',\n",
+       " 'emperor']"
+      ]
+     },
+     "execution_count": 52,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "juliusrdd.flatMap(lambda x: x.split()).filter(lambda x: x.lower() not in stopwords).take(20)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now, use the word counting MapReduce code you've seen before. Count the number of times each word occurs and print the top 20 results as a list of tuples of the form `(word, count)`. *Hint: use `takeOrdered()` instead of `take()`*"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 54,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[('brutus.', 211),\n",
+       " ('cassius.', 152),\n",
+       " ('thou', 107),\n",
+       " ('caesar', 96),\n",
+       " ('brutus', 75),\n",
+       " ('antony.', 73),\n",
+       " ('citizen.', 68),\n",
+       " ('good', 66),\n",
+       " ('caesar.', 62),\n",
+       " ('thy', 54),\n",
+       " ('brutus,', 54),\n",
+       " ('caesar,', 46),\n",
+       " ('\"', 44),\n",
+       " ('casca.', 44),\n",
+       " ('you,', 41),\n",
+       " ('men', 41),\n",
+       " (\"caesar's\", 40),\n",
+       " ('enter', 40),\n",
+       " ('lucius.', 38),\n",
+       " ('cassius,', 38)]"
+      ]
+     },
+     "execution_count": 54,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "wordcounts = (juliusrdd\n",
+    "                       .flatMap(lambda line: line.split(\" \"))\n",
+    "                       .map(lambda w: w.lower())\n",
+    "                       .filter(lambda x: (len(x)>0) & (x not in stopwords))\n",
+    "                       .map(lambda w: (w, 1))\n",
+    "                       .reduceByKey(lambda x,y: x+y)\n",
+    "                       .takeOrdered(20, key = lambda x: -x[1]))\n",
+    "wordcounts"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Plot a bar graph. For each of the top 20 words on the X axis, represent the count on the Y axis."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 61,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "plt.bar(range(len(wordcounts)), [val[1] for val in wordcounts], align='center')\n",
+    "plt.xticks(range(len(wordcounts)), [val[0] for val in wordcounts])\n",
+    "plt.xlabel('Word')\n",
+    "plt.xticks(rotation=75)\n",
+    "plt.ylabel('Count')\n",
+    "plt.title('20 Most Frequently Used Words in Julius Caesar')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Using partitions for parallelization"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "In order to make your code more efficient, you want to use all of the available processing power, even on a single laptop. If your machine has multiple cores, you can tune the number of partitions to use all of them! From http://www.stat.berkeley.edu/scf/paciorek-spark-2014.html:\n",
+    "\n",
+    ">You want each partition to be able to fit in the memory availalbe on a node, and if you have multi-core nodes, you want that as many partitions as there are cores be able to fit in memory.\n",
+    "\n",
+    ">For load-balancing you'll want at least as many partitions as total computational cores in your cluster and probably rather more partitions. The Spark documentation suggests 2-4 partitions (which they also seem to call slices) per CPU. Often there are 100-10,000 partitions. Another rule of thumb is that tasks should take at least 100 ms. If less than that, you may want to repartition to have fewer partitions."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 64,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "shakesrdd=sc.textFile(\"shakes/*.txt\", minPartitions=4)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 65,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "['XXXX',\n",
+       " \"A MIDSUMMER NIGHT'S DREAM\",\n",
+       " '',\n",
+       " 'by William Shakespeare',\n",
+       " '',\n",
+       " '',\n",
+       " '',\n",
+       " '',\n",
+       " 'Persons Represented.',\n",
+       " '']"
+      ]
+     },
+     "execution_count": 65,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "shakesrdd.take(10)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now calculate the top 20 words in all of the files that you just read."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 66,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[('thou', 2001),\n",
+       " ('thy', 1547),\n",
+       " ('good', 1094),\n",
+       " ('hath', 774),\n",
+       " ('thee', 703),\n",
+       " ('you,', 692),\n",
+       " ('make', 640),\n",
+       " (\"'tis\", 599),\n",
+       " ('enter', 597),\n",
+       " ('sir,', 567),\n",
+       " ('love', 565),\n",
+       " ('give', 556),\n",
+       " ('me,', 493),\n",
+       " ('o,', 489),\n",
+       " ('man', 427),\n",
+       " ('come,', 393),\n",
+       " ('lord,', 390),\n",
+       " ('sir', 389),\n",
+       " ('why,', 377),\n",
+       " ('you.', 359)]"
+      ]
+     },
+     "execution_count": 66,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "top20 = (shakesrdd\n",
+    "         .flatMap(lambda line: line.split(' '))\n",
+    "         .map(lambda w: w.lower())\n",
+    "         .filter(lambda x: (len(x)>0) & (x not in stopwords))\n",
+    "         .map(lambda w: (w, 1))\n",
+    "         .reduceByKey(lambda x,y: x+y)\n",
+    "         .takeOrdered(20, key = lambda x: -x[1]))\n",
+    "top20"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Optional topic 1: DataFrames\n",
+    "\n",
+    "Pandas and Spark dataframes can be easily converted to each other, making it easier to work with different data formats. This section shows some examples of each."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Convert Spark DataFrame to Pandas\n",
+    "\n",
+    "`pandas_df = spark_df.toPandas()`\n",
+    "\n",
+    "Create a Spark DataFrame from Pandas\n",
+    "\n",
+    "`spark_df = context.createDataFrame(pandas_df)`\n",
+    "\n",
+    "Must fit in memory.\n",
+    "\n",
+    "![](https://ogirardot.files.wordpress.com/2015/05/rdd-vs-dataframe.png?w=640&h=360)\n",
+    "\n",
+    "VERY IMPORTANT: DataFrames in Spark are like RDD in the sense that they’re an immutable data structure."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 69,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>Gender</th>\n",
+       "      <th>Height</th>\n",
+       "      <th>Weight</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <td>0</td>\n",
+       "      <td>Male</td>\n",
+       "      <td>73.847017</td>\n",
+       "      <td>241.893563</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <td>1</td>\n",
+       "      <td>Male</td>\n",
+       "      <td>68.781904</td>\n",
+       "      <td>162.310473</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <td>2</td>\n",
+       "      <td>Male</td>\n",
+       "      <td>74.110105</td>\n",
+       "      <td>212.740856</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <td>3</td>\n",
+       "      <td>Male</td>\n",
+       "      <td>71.730978</td>\n",
+       "      <td>220.042470</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <td>4</td>\n",
+       "      <td>Male</td>\n",
+       "      <td>69.881796</td>\n",
+       "      <td>206.349801</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "  Gender     Height      Weight\n",
+       "0   Male  73.847017  241.893563\n",
+       "1   Male  68.781904  162.310473\n",
+       "2   Male  74.110105  212.740856\n",
+       "3   Male  71.730978  220.042470\n",
+       "4   Male  69.881796  206.349801"
+      ]
+     },
+     "execution_count": 69,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df=pd.read_csv('01_heights_weights_genders.csv')\n",
+    "df.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Convert this pandas dataframe to a Spark dataframe"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 70,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "DataFrame[Gender: string, Height: double, Weight: double]"
+      ]
+     },
+     "execution_count": 70,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from pyspark.sql import SQLContext\n",
+    "sqlsc=SQLContext(sc)\n",
+    "sparkdf = sqlsc.createDataFrame(df)\n",
+    "sparkdf"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 71,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "+------+-----------------+----------------+\n",
+      "|Gender|           Height|          Weight|\n",
+      "+------+-----------------+----------------+\n",
+      "|  Male|  73.847017017515|241.893563180437|\n",
+      "|  Male|68.78190404589029|  162.3104725213|\n",
+      "|  Male|74.11010539178491|  212.7408555565|\n",
+      "|  Male| 71.7309784033377|220.042470303077|\n",
+      "|  Male| 69.8817958611153|206.349800623871|\n",
+      "+------+-----------------+----------------+\n",
+      "only showing top 5 rows\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "sparkdf.show(5)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 72,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "pyspark.sql.column.Column"
+      ]
+     },
+     "execution_count": 72,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "type(sparkdf.Gender)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 74,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "<class 'pyspark.rdd.PipelinedRDD'>\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "['Male',\n",
+       " 'Male',\n",
+       " 'Male',\n",
+       " 'Male',\n",
+       " 'Male',\n",
+       " 'Male',\n",
+       " 'Male',\n",
+       " 'Male',\n",
+       " 'Male',\n",
+       " 'Male']"
+      ]
+     },
+     "execution_count": 74,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# You can't call .map() on a DataFrame directly - you first have to convert it into an RDD\n",
+    "temp = sparkdf.rdd.map(lambda r: r.Gender)\n",
+    "print(type(temp))\n",
+    "temp.take(10)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.3"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 1
+}
