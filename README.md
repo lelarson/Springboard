@@ -1,6 +1,6 @@
 # Logan's Repository of Work for the Springboard Data Science Career Track
 
-This is the repository for the work I completed to graduate from the [Springboard Data Science Career Track](https://www.springboard.com/workshops/data-science-career-track). Within you'll find all code used to complete numerous mini-projects along with all data, documents and code used in producing two original capstone projects constructed during my time taking the course. 
+This is the repository for the work I completed to graduate from the [Springboard Data Science Career Track](https://www.springboard.com/workshops/data-science-career-track). Within you'll find all code used to complete numerous mini-projects along with all data, documents and code used in producing two original capstone projects constructed from start to finish.
 
 | Topic | Project | File |
 | --- | --- | --- |
