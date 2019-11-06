@@ -12,7 +12,9 @@ This is the repository for the work I completed to graduate from the [Springboar
 | Machine Learning | Linear Regression | [report] |
 | | Logistic Regression | [report](https://github.com/lelarson/Springboard/blob/master/Mini%20Projects/Logistic_Regression.ipynb) |
 | | Classification with Naive Bayes | [report](https://github.com/lelarson/Springboard/blob/master/Mini%20Projects/Naive_Bayes_Movie_Classifier.ipynb) |
-| | Clustering | [report](https://github.com/lelarson/Springboard/blob/master/Mini%20Projects/Clustering.ipynb)  |  
+| | Clustering | [report](https://github.com/lelarson/Springboard/blob/master/Mini%20Projects/Clustering.ipynb)  | 
+| Capstone Project #1 | Fantasy Football Tweet Classification | [report](https://github.com/lelarson/Springboard/tree/master/CP1) |
 | Data Science at Scale | MapReduce and Spark | [report](https://github.com/lelarson/Springboard/blob/master/Mini%20Projects/PySpark%20Mini%20Project.ipynb) |
 | Take-Home Challenges| Challenge #1 | [report](https://github.com/lelarson/Springboard/blob/master/Mini%20Projects/THC1.ipynb) |
 | | Challenge #2 | [report](https://github.com/lelarson/Springboard/blob/master/Mini%20Projects/THC2.ipynb) |
+| Capstone Project #2 | Learning Neural Networks through Text Generation | [report](https://github.com/lelarson/Springboard/tree/master/CP2) |
